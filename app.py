@@ -61,13 +61,13 @@ with st.sidebar:
         help="Reference distance for normalization. Lower = harsher overall.",
     )
     power = st.slider(
-        "Penalty Power", 1.0, 3.0, 1.3, 0.1,
-        help="1.0 = linear penalty. Higher values penalize far answers more steeply.",
+        "Leniency", 1.0, 3.0, 1.3, 0.1,
+        help="1.0 = strict linear scoring. Higher = more generous partial credit to wrong answers.",
     )
 
     st.divider()
     st.subheader("Score Preview")
-    st.caption("Expected scores at current settings:")
+    st.caption("Expected partial scores at current settings:")
     for d, label in [(0, "Correct answer"), (2, "Same schema"), (3.5, "Related"), (5.5, "Different domain")]:
         sim = max(0.0, 1.0 - (min(d, max_dist) / max_dist) ** power)
         filled = int(sim * 10)
@@ -103,17 +103,18 @@ col1, col2, col3 = st.columns(3, gap="large")
 
 with col1:
     st.markdown(
-        '<span style="font-weight:600;font-size:0.95rem;">① Textbook PDF</span><br>'
-        '<span style="font-size:0.75rem;color:#6c757d;font-family:monospace;">&nbsp;</span>',
+        '<span style="font-weight:600;font-size:0.95rem;">① Textbook</span><br>'
+        '<span style="font-size:0.75rem;color:#6c757d;font-family:monospace;">.pdf or .md</span>',
         unsafe_allow_html=True,
     )
     pdf_file = st.file_uploader(
-        "Textbook PDF", type=["pdf"], label_visibility="collapsed", key="pdf_upload"
+        "Textbook", type=["pdf", "md"], label_visibility="collapsed", key="pdf_upload"
     )
     if pdf_file:
-        pdf_bytes = pdf_file.read(); pdf_file.seek(0)
-        h = _pdf_hash(pdf_bytes)
+        file_bytes = pdf_file.read(); pdf_file.seek(0)
+        h = _pdf_hash(file_bytes)
         kg_path = _kg_cache_path(h)
+        is_md = pdf_file.name.lower().endswith(".md")
         if kg_path.exists():
             kg_info = json.loads(kg_path.read_text(encoding="utf-8"))
             st.success(
@@ -121,7 +122,9 @@ with col1:
                 f"{len(kg_info['nodes'])} nodes · {len(kg_info['edges'])} edges"
             )
         else:
-            st.info("KG will be built on first run (~3–5 min, saved for reuse)")
+            hint = "No conversion needed — will build graph directly (~2–3 min)" if is_md \
+                else "KG will be built on first run (~3–5 min, saved for reuse)"
+            st.info(hint)
 
 with col2:
     st.markdown(
@@ -200,14 +203,15 @@ if run:
     from llm_client import get_client, DEFAULT_MODEL
 
     # Re-read files (seek after earlier reads)
-    pdf_file.seek(0); pdf_bytes = pdf_file.read()
+    pdf_file.seek(0); file_bytes = pdf_file.read()
+    is_md = pdf_file.name.lower().endswith(".md")
     qa_file.seek(0);  qa_df     = pd.read_csv(qa_file)
     frames = []
     for f in answers_files:
         f.seek(0); frames.append(pd.read_csv(f))
     answers_df = pd.concat(frames, ignore_index=True)
 
-    h       = _pdf_hash(pdf_bytes)
+    h       = _pdf_hash(file_bytes)
     kg_path = _kg_cache_path(h)
     client  = get_client()
 
@@ -223,22 +227,26 @@ if run:
 
     if not kg_path.exists():
         with st.status("Building knowledge graph from textbook…", expanded=True) as status:
-            # ── Step 1: PDF → Markdown ──────────────────────────────────────
-            pdf_mb = len(pdf_bytes) / 1_000_000
-            est_pdf_secs = max(10, int(pdf_mb * 15))
-            st.write(f"📄 **Step 1/2** — Reading your textbook…  `est. {est_pdf_secs}s`")
-            step1_placeholder = st.empty()
-            with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as f:
-                f.write(pdf_bytes)
-                tmp_pdf = Path(f.name)
-            tmp_md = tmp_pdf.with_suffix(".md")
-            t0 = time.time()
-            with st.spinner("Converting PDF to text… 📖"):
-                pdf_to_markdown(str(tmp_pdf), str(tmp_md))
-            elapsed_pdf = int(time.time() - t0)
-            md_text = tmp_md.read_text(encoding="utf-8")
-            tmp_pdf.unlink(); tmp_md.unlink()
-            step1_placeholder.success(f"✅ Done in {elapsed_pdf}s")
+            # ── Step 1: PDF → Markdown (skip if .md uploaded) ──────────────
+            if is_md:
+                st.write("📝 **Step 1/2** — Markdown file detected, skipping conversion")
+                md_text = file_bytes.decode("utf-8")
+            else:
+                pdf_mb = len(file_bytes) / 1_000_000
+                est_pdf_secs = max(10, int(pdf_mb * 15))
+                st.write(f"📄 **Step 1/2** — Reading your textbook…  `est. {est_pdf_secs}s`")
+                step1_placeholder = st.empty()
+                with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as f:
+                    f.write(file_bytes)
+                    tmp_pdf = Path(f.name)
+                tmp_md = tmp_pdf.with_suffix(".md")
+                t0 = time.time()
+                with st.spinner("Converting PDF to text… 📖"):
+                    pdf_to_markdown(str(tmp_pdf), str(tmp_md))
+                elapsed_pdf = int(time.time() - t0)
+                md_text = tmp_md.read_text(encoding="utf-8")
+                tmp_pdf.unlink(); tmp_md.unlink()
+                step1_placeholder.success(f"✅ Done in {elapsed_pdf}s")
 
             # ── Step 2: Markdown → Graph ────────────────────────────────────
             chunks = chunk_markdown(md_text)
