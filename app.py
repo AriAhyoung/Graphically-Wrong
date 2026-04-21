@@ -8,6 +8,7 @@ import hashlib
 import sys
 import tempfile
 import io
+import time
 from pathlib import Path
 
 import streamlit as st
@@ -221,27 +222,43 @@ if run:
 
     if not kg_path.exists():
         with st.status("Building knowledge graph from textbook…", expanded=True) as status:
-            st.write("📄 **Step 1/2** — Reading your textbook…")
+            # ── Step 1: PDF → Markdown ──────────────────────────────────────
+            pdf_mb = len(pdf_bytes) / 1_000_000
+            est_pdf_secs = max(10, int(pdf_mb * 15))
+            st.write(f"📄 **Step 1/2** — Reading your textbook…  `est. {est_pdf_secs}s`")
+            step1_placeholder = st.empty()
             with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as f:
                 f.write(pdf_bytes)
                 tmp_pdf = Path(f.name)
             tmp_md = tmp_pdf.with_suffix(".md")
+            t0 = time.time()
             with st.spinner("Converting PDF to text… 📖"):
                 pdf_to_markdown(str(tmp_pdf), str(tmp_md))
+            elapsed_pdf = int(time.time() - t0)
             md_text = tmp_md.read_text(encoding="utf-8")
             tmp_pdf.unlink(); tmp_md.unlink()
-            st.write("✅ **Step 1/2** — Textbook converted!")
+            step1_placeholder.success(f"✅ Done in {elapsed_pdf}s")
 
+            # ── Step 2: Markdown → Graph ────────────────────────────────────
             chunks = chunk_markdown(md_text)
             st.write(f"🔗 **Step 2/2** — Building concept graph ({len(chunks)} chunks)…")
             prog = st.progress(0, text="Starting…")
+            eta_placeholder = st.empty()
             all_data = []
+            t0 = time.time()
             for i, chunk in enumerate(chunks):
                 result = extract_graph_from_chunk(client, chunk, DEFAULT_MODEL)
                 all_data.append(result)
+                elapsed = time.time() - t0
+                avg = elapsed / (i + 1)
+                remaining = avg * (len(chunks) - i - 1)
+                mins, secs = divmod(int(remaining), 60)
+                eta_str = f"{mins}m {secs}s" if mins > 0 else f"{secs}s"
                 msg = GRAPH_MSGS[i % len(GRAPH_MSGS)]
-                prog.progress((i + 1) / len(chunks), text=f"{msg} ({i+1}/{len(chunks)})")
+                prog.progress((i + 1) / len(chunks), text=f"{msg}  ({i+1}/{len(chunks)})")
+                eta_placeholder.caption(f"⏱ Elapsed: {int(elapsed)}s · Est. remaining: {eta_str}")
 
+            eta_placeholder.empty()
             G_build = build_graph(all_data)
             export_json(G_build, kg_path)
             status.update(
