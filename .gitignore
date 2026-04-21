@@ -1,0 +1,17 @@
+# Cache
+.kg_cache/
+__pycache__/
+*.pyc
+
+# Environment
+.env
+
+# Data files
+*.pdf
+*.csv
+*.json
+*.numbers
+
+# OS
+.DS_Store
+Thumbs.db
