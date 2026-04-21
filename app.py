@@ -77,10 +77,10 @@ with st.sidebar:
     st.caption("Download and fill in these templates:")
 
     qa_template = "question_id,question,correct_answer\nQ01,\"What type of knowledge refers to facts that can be explicitly stated?\",\"declarative knowledge\"\nQ02,\"What cognitive system temporarily holds and manipulates information?\",\"working memory\"\n"
-    st.download_button("📥 Questions template", qa_template, "questions.csv", "text/csv", use_container_width=True)
+    st.download_button("📥 Questions template", qa_template, "questions.csv", "text/csv", width='stretch')
 
     resp_template = "student_id,question_id,answer\nS1,Q01,\"procedural knowledge\"\nS1,Q02,\"short term memory\"\nS2,Q01,\"mental picture\"\nS2,Q02,\"long term memory\"\n"
-    st.download_button("📥 Responses template", resp_template, "responses.csv", "text/csv", use_container_width=True)
+    st.download_button("📥 Responses template", resp_template, "responses.csv", "text/csv", width='stretch')
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Header
@@ -141,7 +141,7 @@ with col2:
                 st.success(f"✓ {len(qa_df)} questions")
                 st.dataframe(
                     qa_df[["question_id", "correct_answer"]],
-                    use_container_width=True, hide_index=True, height=130,
+                    width='stretch', hide_index=True, height=130,
                 )
         except Exception as e:
             st.error(str(e))
@@ -171,7 +171,7 @@ with col3:
                 st.success(f"✓ {n_students} students · {len(answers_df)} answers ({len(answers_files)} file{'s' if len(answers_files) > 1 else ''})")
                 st.dataframe(
                     answers_df.head(4),
-                    use_container_width=True, hide_index=True, height=130,
+                    width='stretch', hide_index=True, height=130,
                 )
         except Exception as e:
             st.error(str(e))
@@ -185,7 +185,7 @@ run = st.button(
     "▶  Score Answers",
     type="primary",
     disabled=not all_uploaded,
-    use_container_width=True,
+    width='stretch',
 )
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -210,25 +210,37 @@ if run:
     client  = get_client()
 
     # ── Build KG if not cached ──────────────────────────────────────────────
+    GRAPH_MSGS = [
+        "Connecting the dots…",
+        "Finding relationships…",
+        "Mapping concepts…",
+        "Weaving the graph…",
+        "Linking ideas…",
+        "Almost there…",
+    ]
+
     if not kg_path.exists():
         with st.status("Building knowledge graph from textbook…", expanded=True) as status:
-            st.write("**Step 1/2** — Converting PDF to Markdown…")
+            st.write("📄 **Step 1/2** — Reading your textbook…")
             with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as f:
                 f.write(pdf_bytes)
                 tmp_pdf = Path(f.name)
             tmp_md = tmp_pdf.with_suffix(".md")
-            pdf_to_markdown(str(tmp_pdf), str(tmp_md))
+            with st.spinner("Converting PDF to text… 📖"):
+                pdf_to_markdown(str(tmp_pdf), str(tmp_md))
             md_text = tmp_md.read_text(encoding="utf-8")
             tmp_pdf.unlink(); tmp_md.unlink()
+            st.write("✅ **Step 1/2** — Textbook converted!")
 
             chunks = chunk_markdown(md_text)
-            st.write(f"**Step 2/2** — Extracting graph ({len(chunks)} chunks)…")
+            st.write(f"🔗 **Step 2/2** — Building concept graph ({len(chunks)} chunks)…")
             prog = st.progress(0, text="Starting…")
             all_data = []
             for i, chunk in enumerate(chunks):
                 result = extract_graph_from_chunk(client, chunk, DEFAULT_MODEL)
                 all_data.append(result)
-                prog.progress((i + 1) / len(chunks), text=f"Chunk {i+1}/{len(chunks)}")
+                msg = GRAPH_MSGS[i % len(GRAPH_MSGS)]
+                prog.progress((i + 1) / len(chunks), text=f"{msg} ({i+1}/{len(chunks)})")
 
             G_build = build_graph(all_data)
             export_json(G_build, kg_path)
@@ -236,6 +248,7 @@ if run:
                 label=f"✓ Knowledge graph built — {G_build.number_of_nodes()} nodes, {G_build.number_of_edges()} edges",
                 state="complete",
             )
+            st.balloons()
 
     # ── Score answers ───────────────────────────────────────────────────────
     G = load_graph(kg_path)
@@ -304,7 +317,7 @@ if st.session_state.get("scored"):
     summary = summary[["Student", "Binary Score", "KG Score"]]
 
     st.subheader("Summary")
-    st.dataframe(summary, use_container_width=True, hide_index=True)
+    st.dataframe(summary, width='stretch', hide_index=True)
 
     # ── Per-student detail ───────────────────────────────────────────────
     st.subheader("Per-Student Detail")
@@ -323,7 +336,7 @@ if st.session_state.get("scored"):
             ].copy()
             display.columns = ["Q", "Correct Answer", "Student Answer", "✓", "KG Score", "Graph Dist"]
             display["✓"] = display["✓"].map({1: "✓", 0: "✗"})
-            st.dataframe(display, use_container_width=True, hide_index=True)
+            st.dataframe(display, width='stretch', hide_index=True)
 
     # ── Download ─────────────────────────────────────────────────────────
     st.divider()
@@ -333,10 +346,10 @@ if st.session_state.get("scored"):
         csv_out,
         "kg_scores.csv",
         "text/csv",
-        use_container_width=True,
+        width='stretch',
     )
 
-    if st.button("🔄 Score Again with Different Settings", use_container_width=True):
+    if st.button("🔄 Score Again with Different Settings", width='stretch'):
         del st.session_state["scored"]
         del st.session_state["results_df"]
         st.rerun()
