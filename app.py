@@ -12,6 +12,7 @@ import time
 from pathlib import Path
 
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -242,6 +243,60 @@ if run:
             # ── Step 2: Markdown → Graph ────────────────────────────────────
             chunks = chunk_markdown(md_text)
             st.write(f"🔗 **Step 2/2** — Building concept graph ({len(chunks)} chunks)…")
+            components.html("""
+<canvas id="net" width="560" height="140"
+  style="display:block;margin:6px auto 0;border-radius:8px;background:#f8f9fb;"></canvas>
+<script>
+(function(){
+  const cv = document.getElementById('net');
+  const ctx = cv.getContext('2d');
+  const W = cv.width, H = cv.height;
+  const N = 22;
+  const nodes = Array.from({length: N}, (_, i) => ({
+    x: 36 + Math.random() * (W - 72),
+    y: 24 + Math.random() * (H - 48),
+    r: 3 + Math.random() * 2.5,
+    a: 0, born: i * 9
+  }));
+  const edges = [];
+  for (let i = 0; i < N; i++)
+    for (let j = i+1; j < N; j++) {
+      const dx = nodes[i].x-nodes[j].x, dy = nodes[i].y-nodes[j].y;
+      if (Math.sqrt(dx*dx+dy*dy) < 110 && Math.random() > 0.45)
+        edges.push({a:i, b:j, alpha:0, born: Math.max(nodes[i].born,nodes[j].born)+10});
+    }
+  let frame = 0;
+  function reset() {
+    frame = 0;
+    nodes.forEach((n,i) => { n.a=0; n.born=i*9; });
+    edges.forEach(e => { e.alpha=0; e.born=Math.max(nodes[e.a].born,nodes[e.b].born)+10; });
+  }
+  function draw() {
+    ctx.clearRect(0, 0, W, H);
+    edges.forEach(e => { if (frame>e.born) e.alpha=Math.min(1,e.alpha+0.04); });
+    nodes.forEach(n => { if (frame>n.born) n.a=Math.min(1,n.a+0.07); });
+    edges.forEach(e => {
+      if (!e.alpha) return;
+      const a=nodes[e.a], b=nodes[e.b];
+      ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y);
+      ctx.strokeStyle=`rgba(99,128,199,${e.alpha*0.35})`; ctx.lineWidth=1; ctx.stroke();
+    });
+    nodes.forEach(n => {
+      if (!n.a) return;
+      ctx.beginPath(); ctx.arc(n.x,n.y,n.r+4,0,Math.PI*2);
+      ctx.fillStyle=`rgba(99,128,199,${n.a*0.12})`; ctx.fill();
+      ctx.beginPath(); ctx.arc(n.x,n.y,n.r,0,Math.PI*2);
+      ctx.fillStyle=`rgba(74,109,186,${n.a})`; ctx.fill();
+    });
+    frame++;
+    if (nodes.every(n=>n.a>=1) && edges.every(e=>e.alpha>=1))
+      setTimeout(reset, 1200);
+    requestAnimationFrame(draw);
+  }
+  draw();
+})();
+</script>
+""", height=160)
             prog = st.progress(0, text="Starting…")
             eta_placeholder = st.empty()
             all_data = []
@@ -254,18 +309,22 @@ if run:
                 remaining = avg * (len(chunks) - i - 1)
                 mins, secs = divmod(int(remaining), 60)
                 eta_str = f"{mins}m {secs}s" if mins > 0 else f"{secs}s"
+                el_mins, el_secs = divmod(int(elapsed), 60)
+                elapsed_str = f"{el_mins}m {el_secs}s" if el_mins > 0 else f"{el_secs}s"
                 msg = GRAPH_MSGS[i % len(GRAPH_MSGS)]
                 prog.progress((i + 1) / len(chunks), text=f"{msg}  ({i+1}/{len(chunks)})")
-                eta_placeholder.caption(f"⏱ Elapsed: {int(elapsed)}s · Est. remaining: {eta_str}")
+                eta_placeholder.caption(f"⏱ Elapsed: {elapsed_str} · Est. remaining: {eta_str}")
 
             eta_placeholder.empty()
             G_build = build_graph(all_data)
             export_json(G_build, kg_path)
+            total_secs = int(time.time() - t0)
+            el_mins, el_secs = divmod(total_secs, 60)
+            total_str = f"{el_mins}m {el_secs}s" if el_mins > 0 else f"{el_secs}s"
             status.update(
-                label=f"✓ Knowledge graph built — {G_build.number_of_nodes()} nodes, {G_build.number_of_edges()} edges",
+                label=f"✓ Knowledge graph ready — {G_build.number_of_nodes()} nodes · {G_build.number_of_edges()} edges · built in {total_str}",
                 state="complete",
             )
-            st.balloons()
 
     # ── Score answers ───────────────────────────────────────────────────────
     G = load_graph(kg_path)
@@ -304,6 +363,7 @@ if run:
         prog.progress((i + 1) / total, text=f"Scored {i+1}/{total}")
 
     st.session_state["results_df"] = pd.DataFrame(rows)
+    st.session_state["kg_path"]    = str(kg_path)
     st.session_state["scored"]     = True
     st.rerun()
 
@@ -330,8 +390,10 @@ if st.session_state.get("scored"):
     summary["Binary Score"] = summary.apply(
         lambda r: f"{int(r.Correct)}/{int(r.Questions)}", axis=1
     )
-    summary["KG Score"] = summary["KG_Score"].round(3)
-    summary = summary[["Student", "Binary Score", "KG Score"]]
+    summary["Partial Score"] = summary.apply(
+        lambda r: f"{round(r.KG_Score * r.Questions, 1)}/{int(r.Questions)}", axis=1
+    )
+    summary = summary[["Student", "Binary Score", "Partial Score"]]
 
     st.subheader("Summary")
     st.dataframe(summary, width='stretch', hide_index=True)
@@ -345,15 +407,34 @@ if st.session_state.get("scored"):
         correct= s_df["binary"].sum()
         total  = len(s_df)
 
+        partial = round(avg_kg * total, 1)
         with st.expander(
-            f"**{student_id}**  —  Binary: {correct}/{total}  ·  KG Score: {avg_kg:.3f}"
+            f"**{student_id}**  —  Binary: {correct}/{total}  ·  Partial: {partial}/{total}"
         ):
             display = s_df[
                 ["question_id", "correct_answer", "student_answer", "binary", "kg_score", "avg_dist"]
             ].copy()
-            display.columns = ["Q", "Correct Answer", "Student Answer", "✓", "KG Score", "Graph Dist"]
+            display.columns = ["Q", "Correct Answer", "Student Answer", "✓", "Similarity", "Graph Dist"]
             display["✓"] = display["✓"].map({1: "✓", 0: "✗"})
+            display["Similarity"] = display["Similarity"].apply(lambda x: f"{round(x*100)}%")
             st.dataframe(display, width='stretch', hide_index=True)
+
+    # ── Knowledge Graph Viewer ───────────────────────────────────────────
+    st.divider()
+    with st.expander("View Knowledge Graph"):
+        if st.session_state.get("kg_path"):
+            from pyvis.network import Network
+            from answer_scorer import load_graph
+            G_viz = load_graph(Path(st.session_state["kg_path"]))
+            net = Network(height="560px", width="100%", bgcolor="#fafafa", font_color="#222")
+            net.barnes_hut(gravity=-8000, spring_length=120, spring_strength=0.04)
+            for node, data in G_viz.nodes(data=True):
+                net.add_node(node, label=data.get("label", node),
+                             color="#4A6DBB", font={"size": 11}, size=14)
+            for u, v, data in G_viz.edges(data=True):
+                net.add_edge(u, v, title=data.get("relation", ""),
+                             color="#aab4cc", width=1)
+            components.html(net.generate_html(), height=580, scrolling=False)
 
     # ── Download ─────────────────────────────────────────────────────────
     st.divider()
