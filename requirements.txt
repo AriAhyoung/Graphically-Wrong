@@ -2,4 +2,4 @@ streamlit
 pandas
 openai
 networkx
-pymupdf
+pymupdf4llm
