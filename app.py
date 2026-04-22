@@ -353,6 +353,18 @@ if run:
     prog  = st.progress(0, text="Scoring answers…")
     rows  = []
 
+    # Pre-extract correct concepts once per question that has at least one wrong answer
+    wrong_qids = {
+        row.question_id
+        for row in merged.itertuples(index=False)
+        if str(row.answer).strip().lower() != str(row.correct_answer).strip().lower()
+    }
+    correct_concepts_cache = {}
+    for _, qrow in qa_df[qa_df["question_id"].isin(wrong_qids)].iterrows():
+        correct_concepts_cache[qrow["question_id"]] = extract_concepts(
+            client, DEFAULT_MODEL, qrow["question"], qrow["correct_answer"], vocab
+        )
+
     for i, row in enumerate(merged.itertuples(index=False)):
         binary = int(str(row.answer).strip().lower() == str(row.correct_answer).strip().lower())
 
@@ -360,7 +372,7 @@ if run:
             kg_score, avg_dist, correct_concepts, student_concepts = 1.0, 0.0, [], []
             final_score = 1.0
         else:
-            correct_concepts = extract_concepts(client, DEFAULT_MODEL, row.question, row.correct_answer, vocab)
+            correct_concepts = correct_concepts_cache[row.question_id]
             student_concepts = extract_concepts(client, DEFAULT_MODEL, row.question, row.answer, vocab)
             dists    = pairwise_distances(G, correct_concepts, student_concepts)
             avg_dist = round(sum(dists) / len(dists), 3) if dists else None
