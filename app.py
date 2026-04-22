@@ -431,7 +431,9 @@ if st.session_state.get("scored"):
             display.columns = ["Q", "Correct Answer", "Student Answer", "✓", "Score", "Similarity", "Graph Dist"]
             display["✓"] = display["✓"].map({1: "✓", 0: "✗"})
             display["Score"] = display["Score"].apply(lambda x: f"{x:.2f}")
-            display["Similarity"] = display["Similarity"].apply(lambda x: f"{round(x*100)}%")
+            display["Similarity"] = display.apply(
+                lambda r: "—" if r["✓"] == "✓" else f"{round(r['Similarity']*100)}%", axis=1
+            )
             st.dataframe(display, width='stretch', hide_index=True)
 
     # ── Knowledge Graph Viewer ───────────────────────────────────────────
