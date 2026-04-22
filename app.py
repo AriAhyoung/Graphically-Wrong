@@ -353,15 +353,18 @@ if run:
     rows  = []
 
     for i, row in enumerate(merged.itertuples(index=False)):
-        correct_concepts = extract_concepts(client, DEFAULT_MODEL, row.question, row.correct_answer, vocab)
-        student_concepts = extract_concepts(client, DEFAULT_MODEL, row.question, row.answer, vocab)
-
-        dists    = pairwise_distances(G, correct_concepts, student_concepts)
-        avg_dist = round(sum(dists) / len(dists), 3) if dists else None
-        kg_score = compute_similarity(G, correct_concepts, student_concepts, max_dist, power)
-
         binary = int(str(row.answer).strip().lower() == str(row.correct_answer).strip().lower())
-        final_score = 1.0 if binary == 1 else kg_score * 0.7
+
+        if binary == 1:
+            kg_score, avg_dist, correct_concepts, student_concepts = 1.0, 0.0, [], []
+            final_score = 1.0
+        else:
+            correct_concepts = extract_concepts(client, DEFAULT_MODEL, row.question, row.correct_answer, vocab)
+            student_concepts = extract_concepts(client, DEFAULT_MODEL, row.question, row.answer, vocab)
+            dists    = pairwise_distances(G, correct_concepts, student_concepts)
+            avg_dist = round(sum(dists) / len(dists), 3) if dists else None
+            kg_score = compute_similarity(G, correct_concepts, student_concepts, max_dist, power)
+            final_score = kg_score * 0.7
 
         rows.append({
             "student_id":        row.student_id,
