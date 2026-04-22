@@ -12,6 +12,7 @@ import time
 from pathlib import Path
 
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -454,7 +455,7 @@ if st.session_state.get("scored"):
             for u, v, data in G_viz.edges(data=True):
                 net.add_edge(u, v, title=data.get("relation", ""),
                              color="#aab4cc", width=1)
-            st.html(net.generate_html())
+            components.html(net.generate_html(), height=580, scrolling=False)
 
     # ── Download ─────────────────────────────────────────────────────────
     st.divider()
