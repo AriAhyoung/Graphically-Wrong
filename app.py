@@ -57,12 +57,12 @@ with st.sidebar:
 
     st.subheader("Scoring")
     max_dist = st.slider(
-        "Max Distance", 5.0, 20.0, 10.0, 0.5,
-        help="Reference distance for normalization. Lower = harsher overall.",
+        "Max Distance", 1.0, 10.0, 4.0, 0.5,
+        help="Reference distance for normalization. Set this close to your graph's typical longest path. Lower = harsher, more spread.",
     )
     power = st.slider(
-        "Leniency", 1.0, 3.0, 1.3, 0.1,
-        help="1.0 = strict linear scoring. Higher = more generous partial credit to wrong answers.",
+        "Leniency", 1.0, 5.0, 2.0, 0.1,
+        help="1.0 = linear penalty. Higher = exponential — nearby wrong answers keep more credit, distant ones drop sharply.",
     )
 
     st.divider()
