@@ -12,7 +12,6 @@ import time
 from pathlib import Path
 
 import streamlit as st
-import streamlit.components.v1 as components
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -257,7 +256,7 @@ if run:
             # ── Step 2: Markdown → Graph ────────────────────────────────────
             chunks = chunk_markdown(md_text)
             st.write(f"🔗 **Step 2/2** — Building concept graph ({len(chunks)} chunks)…")
-            components.html("""
+            st.html("""
 <canvas id="net" width="560" height="140"
   style="display:block;margin:6px auto 0;border-radius:8px;background:#f8f9fb;"></canvas>
 <script>
@@ -310,7 +309,7 @@ if run:
   draw();
 })();
 </script>
-""", height=160)
+""")
             prog = st.progress(0, text="Starting…")
             eta_placeholder = st.empty()
             all_data = []
@@ -450,7 +449,7 @@ if st.session_state.get("scored"):
             for u, v, data in G_viz.edges(data=True):
                 net.add_edge(u, v, title=data.get("relation", ""),
                              color="#aab4cc", width=1)
-            components.html(net.generate_html(), height=580, scrolling=False)
+            st.html(net.generate_html())
 
     # ── Download ─────────────────────────────────────────────────────────
     st.divider()
