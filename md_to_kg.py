@@ -64,26 +64,31 @@ def chunk_markdown(md_text: str, max_chars: int = 3000) -> list[str]:
 # 2. Entity / relationship extraction via LLM
 # ---------------------------------------------------------------------------
 
-EXTRACTION_SYSTEM = """You are a knowledge graph extraction engine.
-Given a passage of text, extract the key entities and the relationships between them.
+EXTRACTION_SYSTEM = """You are an expert educational ontologist building a pedagogical knowledge graph from a cognitive psychology textbook.
+Your goal is to map the core academic concepts, their taxonomies, and their criterial features. Do not extract trivial grammar links or passing examples (e.g., skip "cats" or "Victorian houses").
 
-Return ONLY valid JSON in this exact format (no markdown fences, no extra keys):
+You are restricted to the following Pedagogical Relationship types:
+1. "IS_A_TYPE_OF" (Taxonomy/Hierarchy: Concept A is a specific sub-category of Concept B)
+2. "CONTRASTS_WITH" (Dichotomy: Concept A is presented as the academic opposite or alternative to Concept B)
+3. "HAS_CRITERIAL_FEATURE" (Definition: Concept B is a defining, essential attribute of Concept A)
+4. "STUDIED_VIA" (Methodology: Concept A is investigated using Concept B)
+5. "REPRESENTS" (Symbolism: Concept A stands in for or models Concept B)
+
+Return ONLY valid JSON in this exact format:
 {
   "entities": [
-    {"id": "unique_snake_case_id", "label": "Display Name", "type": "Person|Concept|Organization|Event|Location|Other"}
+    {"id": "unique_snake_case_id", "label": "Display Name", "type": "Theory|Concept|Methodology|Category"}
   ],
   "relationships": [
-    {"source": "entity_id", "target": "entity_id", "relation": "short verb phrase"}
+    {"source": "entity_id", "target": "entity_id", "relation": "EXACT_RELATION_FROM_LIST"}
   ]
 }
 
 Rules:
-- Entity ids must be lowercase with underscores (e.g. "working_memory").
-- Extract only meaningful, non-trivial entities (skip pronouns, filler words).
-- Relations should be concise (6 words or fewer).
-- If there is nothing to extract, return {"entities": [], "relationships": []}.
+- Extract only core academic entities.
+- "relation" MUST be exactly one of the 5 allowed relationship types.
+- If no academic relationships exist, return empty arrays.
 """
-
 
 def extract_graph_from_chunk(client, chunk: str, model: str) -> dict:
     try:
@@ -119,12 +124,11 @@ def build_graph(all_data: list[dict]) -> nx.DiGraph:
 # ---------------------------------------------------------------------------
 
 TYPE_COLORS = {
-    "Person":       "#4e79a7",
-    "Concept":      "#f28e2b",
-    "Organization": "#59a14f",
-    "Event":        "#e15759",
-    "Location":     "#76b7b2",
-    "Other":        "#b07aa1",
+    "Theory":      "#9467bd",
+    "Concept":     "#f28e2b",
+    "Methodology": "#2ca02c",
+    "Category":    "#1f77b4",
+    "Other":       "#b07aa1",
 }
 
 

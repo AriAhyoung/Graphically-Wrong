@@ -54,7 +54,9 @@ def relation_to_weight(relation: str) -> float:
     r = relation.lower().strip()
 
     # Taxonomic / is-a  (same conceptual family)
+    # HAS_CRITERIAL_FEATURE is a definitional link — treated as taxonomically close
     if any(kw in r for kw in [
+        'is_a_type_of', 'has_criterial_feature',
         'is a type', 'is type', 'is a form', 'is form', 'is a kind',
         'is a category', 'is an example', 'is an instance', 'is categorized',
         'is classification', 'is subordinate', 'is superordinate',
@@ -65,6 +67,7 @@ def relation_to_weight(relation: str) -> float:
 
     # Contrast / differentiation  (same schema, explicitly paired)
     if any(kw in r for kw in [
+        'contrasts_with',
         'contrast', 'differ', 'distinct from', 'differentiated',
         'alternative to', 'departure from', 'not the same',
         'is in debate', 'contradicts', 'challenges exclusivity',
@@ -80,11 +83,17 @@ def relation_to_weight(relation: str) -> float:
     ]):
         return 1.5
 
+    # Methodological  (STUDIED_VIA: concept investigated using a method)
+    # Must be checked before the person->concept branch to avoid mis-matching 'studied'
+    if 'studied_via' in r:
+        return 2.0
+
     # Functional  (process / causal link)
     if any(kw in r for kw in [
+        'represents',
         'influences', 'facilitates', 'supports', 'affects',
         'uses', 'utilizes', 'involves', 'requires', 'enables',
-        'processes', 'represents', 'encodes', 'stores',
+        'processes', 'encodes', 'stores',
         'organizes', 'activates', 'improves', 'enhances',
         'underlies', 'causes', 'results', 'produces', 'explains',
     ]):
