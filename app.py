@@ -67,12 +67,18 @@ with st.sidebar:
 
     st.divider()
     st.subheader("Score Preview")
-    st.caption("Expected partial scores at current settings:")
-    for d, label in [(0, "Correct answer"), (2, "Same schema"), (3.5, "Related"), (5.5, "Different domain")]:
+    st.caption("Expected scores at current settings:")
+    for d, label, is_correct in [
+        (0,   "Correct answer",          True),
+        (2,   "Same schema (wrong)",     False),
+        (3.5, "Related (wrong)",         False),
+        (5.5, "Different domain (wrong)",False),
+    ]:
         sim = max(0.0, 1.0 - (min(d, max_dist) / max_dist) ** power)
-        filled = int(sim * 10)
+        score = 1.0 if is_correct else sim * 0.5
+        filled = int(score * 10)
         bar = "█" * filled + "░" * (10 - filled)
-        st.caption(f"`{bar}` **{sim:.2f}**  {label}")
+        st.caption(f"`{bar}` **{score:.2f}**  {label}")
 
     st.divider()
     st.subheader("CSV Templates")
@@ -356,6 +362,7 @@ if run:
         kg_score = compute_similarity(G, correct_concepts, student_concepts, max_dist, power)
 
         binary = int(str(row.answer).strip().lower() == str(row.correct_answer).strip().lower())
+        final_score = 1.0 if binary == 1 else kg_score * 0.5
 
         rows.append({
             "student_id":        row.student_id,
@@ -364,6 +371,7 @@ if run:
             "student_answer":    row.answer,
             "binary":            binary,
             "kg_score":          kg_score,
+            "final_score":       final_score,
             "avg_dist":          avg_dist,
             "correct_concepts":  str(correct_concepts),
             "student_concepts":  str(student_concepts),
@@ -390,7 +398,7 @@ if st.session_state.get("scored"):
         .agg(
             Questions=("question_id", "count"),
             Correct=("binary", "sum"),
-            KG_Score=("kg_score", "mean"),
+            Final_Score=("final_score", "sum"),
         )
         .reset_index()
         .rename(columns={"student_id": "Student"})
@@ -399,7 +407,7 @@ if st.session_state.get("scored"):
         lambda r: f"{int(r.Correct)}/{int(r.Questions)}", axis=1
     )
     summary["Partial Score"] = summary.apply(
-        lambda r: f"{round(r.KG_Score * r.Questions, 1)}/{int(r.Questions)}", axis=1
+        lambda r: f"{round(r.Final_Score, 1)}/{int(r.Questions)}", axis=1
     )
     summary = summary[["Student", "Binary Score", "Partial Score"]]
 
@@ -411,19 +419,19 @@ if st.session_state.get("scored"):
 
     for student_id in results_df["student_id"].unique():
         s_df   = results_df[results_df["student_id"] == student_id].copy()
-        avg_kg = s_df["kg_score"].mean()
         correct= s_df["binary"].sum()
         total  = len(s_df)
+        partial = round(s_df["final_score"].sum(), 1)
 
-        partial = round(avg_kg * total, 1)
         with st.expander(
             f"**{student_id}**  —  Binary: {correct}/{total}  ·  Partial: {partial}/{total}"
         ):
             display = s_df[
-                ["question_id", "correct_answer", "student_answer", "binary", "kg_score", "avg_dist"]
+                ["question_id", "correct_answer", "student_answer", "binary", "final_score", "kg_score", "avg_dist"]
             ].copy()
-            display.columns = ["Q", "Correct Answer", "Student Answer", "✓", "Similarity", "Graph Dist"]
+            display.columns = ["Q", "Correct Answer", "Student Answer", "✓", "Score", "Similarity", "Graph Dist"]
             display["✓"] = display["✓"].map({1: "✓", 0: "✗"})
+            display["Score"] = display["Score"].apply(lambda x: f"{x:.2f}")
             display["Similarity"] = display["Similarity"].apply(lambda x: f"{round(x*100)}%")
             st.dataframe(display, width='stretch', hide_index=True)
 
