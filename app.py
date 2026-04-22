@@ -74,7 +74,7 @@ with st.sidebar:
         (5.5, "Different domain (wrong)",False),
     ]:
         sim = max(0.0, 1.0 - (min(d, max_dist) / max_dist) ** power)
-        score = 1.0 if is_correct else sim * 0.5
+        score = 1.0 if is_correct else sim * 0.7
         filled = int(score * 10)
         bar = "█" * filled + "░" * (10 - filled)
         st.caption(f"`{bar}` **{score:.2f}**  {label}")
@@ -361,7 +361,7 @@ if run:
         kg_score = compute_similarity(G, correct_concepts, student_concepts, max_dist, power)
 
         binary = int(str(row.answer).strip().lower() == str(row.correct_answer).strip().lower())
-        final_score = 1.0 if binary == 1 else kg_score * 0.5
+        final_score = 1.0 if binary == 1 else kg_score * 0.7
 
         rows.append({
             "student_id":        row.student_id,
